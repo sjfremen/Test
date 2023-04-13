@@ -8,9 +8,11 @@ from PIL import Image # new import
 
 # Create Chart And Percentile Metrics
 df = pd.read_csv('metrics.csv')
+
 df['test'] = df.rhodl_ratio.rank(pct = True)
 df['test2'] = df.mvrv_z_score.rank(pct = True)
 df['200davg'] = df.price_usd_close.rolling(window=200).mean()
+df['200wavg'] = df.price_usd_close.rolling(window=1400).mean()
 
 fig = px.scatter(df, x='t', y='price_usd_close', color='test', 
                  log_y=True, title="BTC Price Weighted By RHODL Percentile",
@@ -55,8 +57,9 @@ fig3.add_layout_image(
     )
 )
 fig3.update_yaxes(type='log')
-fig3.add_trace(go.Scatter(x=df['t'], y=df['200davg'], name = '200d avg'))
 fig3.add_trace(go.Scatter(x=df['t'], y=df['price_realized_usd'], name = 'Realized Price'))
+fig3.add_trace(go.Scatter(x=df['t'], y=df['200davg'], name = '200d avg'))
+fig3.add_trace(go.Scatter(x=df['t'], y=df['200wavg'], name = '200w avg'))
 title_text = "BTC Price Versus Key Price Levels"
 fig3.update_layout(title=title_text)
 
@@ -90,6 +93,8 @@ fig3.update_layout(
     )
 )
 
+fig3.update_yaxes(fixedrange=False)
+
 #Dash Example
 external_stylesheets = ['https://codepen.io/chriddyp/pen/bWLwgP.css']
  
@@ -113,3 +118,4 @@ app.layout = html.Div(className='row', children=[
 
 if __name__ == '__main__':
     app.run_server(debug=False)
+    
