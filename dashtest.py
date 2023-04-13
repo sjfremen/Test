@@ -57,7 +57,6 @@ fig3.add_layout_image(
 fig3.update_yaxes(type='log')
 fig3.add_trace(go.Scatter(x=df['t'], y=df['200davg'], name = '200d avg'))
 fig3.add_trace(go.Scatter(x=df['t'], y=df['price_realized_usd'], name = 'Realized Price'))
-fig3.update_layout(width=1200, height=600)
 title_text = "BTC Price Versus Key Price Levels"
 fig3.update_layout(title=title_text)
 
@@ -102,35 +101,15 @@ colors = {
     'text': '#00008B'
 }
 
-app.layout = html.Div(children=[
-    # All elements from the top of the page
-    html.Div([
-        html.H1(children='Hello Dash'),
-
-        html.Div(children='''
-            Dash: A web application framework for Python.
-        '''),
-
-        dcc.Graph(
-            id='graph1',
-            figure=fig
-        ),  
-    ]),
-    # New Div for all elements in the new 'row' of the page
-    html.Div([
-        html.H1(children='Hello Dash'),
-
-        html.Div(children='''
-            Dash: A web application framework for Python.
-        '''),
-
-        dcc.Graph(
-            id='graph2',
-            figure=fig3
-        ),  
-    ]),
+app.layout = html.Div(className='row', children=[
+    html.H1("BM PRO Dashboard MVP"),
+    html.Div(children=[
+        dcc.Graph(id="graph1", figure=fig3, style={'display': 'inline-block'}),
+        dcc.Graph(id="graph2", figure=fig3, style={'display': 'inline-block'}),
+        dcc.Graph(id="graph3", figure=fig3, style={'display': 'inline-block'}),
+        dcc.Graph(id="graph4", figure=fig3, style={'display': 'inline-block'})
+    ])
 ])
 
 if __name__ == '__main__':
     app.run_server(debug=False)
-
