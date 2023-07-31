@@ -156,6 +156,7 @@ fig.show()
 
 # Create the Dash app
 app = dash.Dash(__name__)
+server = app.server
 
 # Define the layout of the app
 app.layout = html.Div([
@@ -169,4 +170,4 @@ def update_graph():
     return fig
 
 if __name__ == '__main__':
-    app.run_server(debug=True)
+    app.run_server(debug=False)
