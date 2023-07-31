@@ -8,6 +8,9 @@ import dash
 #Get Glassnode Data
 import pandas as pd
 import requests
+#Get Glassnode Data
+import pandas as pd
+import requests
 import datetime
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
@@ -95,10 +98,14 @@ import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 
 # Create a subplot with 2 rows and 2 columns, and add subplot titles
-fig = make_subplots(rows=3, cols=2, subplot_titles=["Perps Funding Rate", "Skew 1M 30d Change",
-                                                    "STH Price Cross", "STHLTH Ratio 14d Change", 
-                                                    "Hash Ribbons", 'Funding Basis 30d Change'],
-                    row_heights=[0.8, 0.8, 0.8])
+fig = make_subplots(
+    rows=3, cols=2,
+    subplot_titles=["Perps Funding Rate", "Skew 1M 30d Change",
+                    "STH Price Cross", "STHLTH Ratio 14d Change",
+                    "Hash Ribbons", 'Funding Basis 30d Change'],
+    row_heights=[0.8, 0.8, 0.8],
+    vertical_spacing=0.1,  # Adjust the vertical spacing between subplots
+)
 
 # Function to convert color to pastel shade
 def pastel_color(hex_color):
@@ -184,8 +191,13 @@ chart6_static_line = go.Scatter(x=df['date'], y=static_line_chart6, mode='lines'
 fig.add_trace(chart6_static_line, row=3, col=1)
 
 # Update layout and axis labels
-fig.update_layout(title_text="UTXO Strategy Dashboard", height=800, plot_bgcolor='rgb(240, 240, 240)',
-                  font_family='Arial', font_size=20)
+fig.update_layout(
+    title_text="UTXO Strategy Dashboard",
+    height=1200,
+    plot_bgcolor='rgb(240, 240, 240)',
+    font_family='Arial',
+    font_size=20,
+)
 
 # Update X-axis range for all subplots in the 1st column to start from 1/1/2023
 for i in range(1, 4):
@@ -195,16 +207,16 @@ for i in range(1, 4):
 for i in range(1, 4):
     fig.update_xaxes(range=["2023-01-01", df['date'].max()], row=i, col=2)
 
-#Update Y Axis Across Charts 
+# Update Y Axis Across Charts
 fig.update_yaxes(range=[90, 110], row=3, col=1)
 fig.update_yaxes(range=[50, 150], row=2, col=1)
 
 # Add annotations at the bottom of the charts
 note_text = "Blue dotted lines are entry triggers"
 color_note_text = "Green: Positive values | Red: Negative values"
-fig.add_annotation(xref='paper', yref='paper', x=0.5, y=-0.15, text=note_text,
+fig.add_annotation(x=0.5, y=-0.25, xref='paper', yref='paper', text=note_text,
                    showarrow=False, font=dict(size=12), align='center')
-fig.add_annotation(xref='paper', yref='paper', x=0.5, y=-0.18, text=color_note_text,
+fig.add_annotation(x=0.5, y=-0.30, xref='paper', yref='paper', text=color_note_text,
                    showarrow=False, font=dict(size=12), align='center')
 
 # Show the dashboard
