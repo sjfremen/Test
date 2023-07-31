@@ -5,18 +5,6 @@ import datetime
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 import dash
-#Get Glassnode Data
-import pandas as pd
-import requests
-#Get Glassnode Data
-import pandas as pd
-#Get Glassnode Data
-import pandas as pd
-import requests
-import datetime
-import plotly.graph_objects as go
-from plotly.subplots import make_subplots
-import dash
 import dash_core_components as dcc
 import dash_html_components as html
 
@@ -195,7 +183,7 @@ fig.add_trace(chart6_static_line, row=3, col=2)
 # Update layout and axis labels
 fig.update_layout(
     title_text="UTXO Strategy Dashboard",
-    height=1200,  # Increased height to create space for annotations
+    height=1000,  # Increased height to create space for annotations
     plot_bgcolor='rgb(240, 240, 240)',
     font_family='Arial',
     font_size=20,
@@ -215,19 +203,17 @@ fig.update_yaxes(range=[50, 150], row=2, col=1)
 
 # Add annotations at the bottom of the charts
 note_text = "Green: Positive values | Red: Negative values | Blue lines: Entry triggers"
-#color_note_text = "Green: Positive values | Red: Negative values"
-#fig.add_annotation(xref='paper', yref='paper', x=0.5, y=-0.01, text=note_text,
-                  # showarrow=False, font=dict(size=12), align='center')#
 
-fig.add_annotation(xref='paper', yref='paper',text=note_text, y=-0.083,
+fig.add_annotation(xref='paper', yref='paper',text=note_text, y=-0.08,
                    showarrow=False, font=dict(size=12), align='center')
 
 
-#fig.add_annotation(xref='paper', yref='paper', x=0.5, y=-0.1, text=color_note_text,
-                   #showarrow=False, font=dict(size=12), align='center')
+fig.update_xaxes(tickfont=dict(size=12))
+fig.update_yaxes(tickfont=dict(size=12))
 
 # Show the dashboard
 fig.show()
+
 
 
 # Create the Dash app
