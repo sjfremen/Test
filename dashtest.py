@@ -114,7 +114,7 @@ fig.add_trace(skew_static_line, row=1, col=2)
 
 # Chart 3 (Bottom-left) - Reflecting variable 'sth' in Chart 3
 for index, row in df.iterrows():
-    color = pastel_color('008000') if row['sth'] >= 98 else pastel_color('FF0000')
+    color = pastel_color('008000') if row['sth'] >= 100 else pastel_color('FF0000')
     trace = go.Scatter(x=[row['date'], row['date']], y=[0, row['sth']], mode='lines', name='',
                        line=dict(color=color), showlegend=False)  # Hide legend entry for Chart 3
     fig.add_trace(trace, row=2, col=1)
@@ -140,7 +140,7 @@ fig.add_trace(change14_static_line, row=2, col=2)
 
 # Update layout and axis labels
 fig.update_layout(title_text="UTXO Strategy Dashboard", height=800, plot_bgcolor='rgb(240, 240, 240)',
-                  font_family='Arial', font_size=14)
+                  font_family='Arial', font_size=20)
 
 # Add annotations at the bottom of the charts
 note_text = "Blue dotted lines are entry triggers"
@@ -152,6 +152,7 @@ fig.add_annotation(xref='paper', yref='paper', x=0.5, y=-0.13, text=color_note_t
 
 # Show the dashboard
 fig.show()
+
 
 
 # Create the Dash app
