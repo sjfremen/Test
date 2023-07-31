@@ -10,6 +10,8 @@ import pandas as pd
 import requests
 #Get Glassnode Data
 import pandas as pd
+#Get Glassnode Data
+import pandas as pd
 import requests
 import datetime
 import plotly.graph_objects as go
@@ -188,12 +190,12 @@ for index, row in df.iterrows():
 static_line_chart6 = [3] * len(df['date'])
 chart6_static_line = go.Scatter(x=df['date'], y=static_line_chart6, mode='lines', name='',
                                 line=dict(color=pastel_color('000080'), dash='dash'), showlegend=False)
-fig.add_trace(chart6_static_line, row=3, col=1)
+fig.add_trace(chart6_static_line, row=3, col=2)
 
 # Update layout and axis labels
 fig.update_layout(
     title_text="UTXO Strategy Dashboard",
-    height=1200,
+    height=1200,  # Increased height to create space for annotations
     plot_bgcolor='rgb(240, 240, 240)',
     font_family='Arial',
     font_size=20,
@@ -212,15 +214,21 @@ fig.update_yaxes(range=[90, 110], row=3, col=1)
 fig.update_yaxes(range=[50, 150], row=2, col=1)
 
 # Add annotations at the bottom of the charts
-note_text = "Blue dotted lines are entry triggers"
-color_note_text = "Green: Positive values | Red: Negative values"
-fig.add_annotation(x=0.5, y=-0.25, xref='paper', yref='paper', text=note_text,
+note_text = "Green: Positive values | Red: Negative values | Blue lines: Entry triggers"
+#color_note_text = "Green: Positive values | Red: Negative values"
+#fig.add_annotation(xref='paper', yref='paper', x=0.5, y=-0.01, text=note_text,
+                  # showarrow=False, font=dict(size=12), align='center')#
+
+fig.add_annotation(xref='paper', yref='paper',text=note_text, y=-0.083,
                    showarrow=False, font=dict(size=12), align='center')
-fig.add_annotation(x=0.5, y=-0.30, xref='paper', yref='paper', text=color_note_text,
-                   showarrow=False, font=dict(size=12), align='center')
+
+
+#fig.add_annotation(xref='paper', yref='paper', x=0.5, y=-0.1, text=color_note_text,
+                   #showarrow=False, font=dict(size=12), align='center')
 
 # Show the dashboard
 fig.show()
+
 
 # Create the Dash app
 app = dash.Dash(__name__)
