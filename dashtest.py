@@ -120,7 +120,7 @@ for index, row in df.iterrows():
     fig.add_trace(trace, row=2, col=1)
 
 # Add static second line at y=98 for Chart 3
-static_line_sth = [98] * len(df['date'])
+static_line_sth = [100] * len(df['date'])
 sth_static_line = go.Scatter(x=df['date'], y=static_line_sth, mode='lines', name='',
                              line=dict(color=pastel_color('000080'), dash='dash'), showlegend=False)  # Hide legend entry for Static Line
 fig.add_trace(sth_static_line, row=2, col=1)
