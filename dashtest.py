@@ -1,106 +1,166 @@
+#Get Glassnode Data
+import pandas as pd
+import requests
+import datetime
+import plotly.graph_objects as go
+from plotly.subplots import make_subplots
 import dash
 import dash_core_components as dcc
 import dash_html_components as html
+
+api_key = "2NmhZcZSARowN6nW069LTzhnZ4L"
+TRAIN_START_DATE = '2023-01-01'
+dt = datetime.datetime.strptime(TRAIN_START_DATE, '%Y-%m-%d')
+start_date = int(dt.timestamp())
+
+def get_glassnode(indicator):
+  endpoints = {
+        'mvrv': 'market/mvrv_z_score',
+        'ohlc': 'market/price_usd_ohlc',
+        'funding': 'derivatives/futures_funding_rate_perpetual',
+        'oi': 'derivatives/futures_open_interest_sum',
+        'skew1w': 'derivatives/options_25delta_skew_1_week',
+        'skew1m': 'derivatives/options_25delta_skew_1_month',
+        'STHMVRV': 'market/mvrv_less_155',
+        'LTHMVRV': 'market/mvrv_more_155'
+
+  }
+  
+  url_mvrv = f"https://api.glassnode.com/v1/metrics/{endpoints[indicator]}?api_key={api_key}&s={start_date}&i=24h&a=BTC"
+  response_mvrv = requests.get(url_mvrv)
+
+  if response_mvrv.status_code != 200:
+      raise ValueError(f"Error fetching MVRV data: {response_mvrv.status_code}")
+  
+
+  if indicator == 'ohlc':
+    data_dict = response_mvrv.json()
+    mvrv_data = pd.json_normalize(data_dict, sep='_')
+    mvrv_data.rename(columns={'o_o': 'Open', 'o_h': 'High',
+                     'o_l': 'Low', 'o_c': 'Close', 'o_v': 'Volume'}, inplace=True)
+
+
+  else:      
+    mvrv_data = pd.DataFrame(response_mvrv.json())
+    mvrv_data = mvrv_data.rename(columns={'v': indicator})
+
+  mvrv_data['date'] = pd.to_datetime(mvrv_data['t'], unit='s').dt.strftime('%Y-%m-%d %H:%M:%S')
+  mvrv_data['date_merge'] = pd.to_datetime(mvrv_data['date'])
+  mvrv_data = mvrv_data.drop(['t'], axis=1)
+
+  # mvrv_data.head()
+  return mvrv_data
+
+
+ohlc = get_glassnode('ohlc')
+funding = get_glassnode('funding')
+skew1m = get_glassnode('skew1m')
+sth = get_glassnode('STHMVRV')
+lth = get_glassnode('LTHMVRV')
+
+df = ohlc.merge(funding, on="date_merge", how="left")
+df = df.merge(skew1m, on="date_merge",how="left")
+df = df.merge(sth, on="date_merge",how="left")
+df = df.merge(lth,on="date_merge",how="left")
+df['date'] = pd.to_datetime(df['date_merge'])
+df = df.drop(['date_x', 'date_y','date_merge'], axis=1)
+df['skew_100'] = df['skew1m']*100
+df['skew_chg'] = df['skew_100'].diff(periods=30)
+df['sth'] = df['STHMVRV']*100
+df['ratio'] = (df['Close']/df['STHMVRV'])/(df['Close']/df['LTHMVRV'])
+df['change14'] = df['ratio'].pct_change(periods = 14)*100
+
+df.to_csv('dash.csv')
+metric_cleaned = df['funding'].dropna()
+
 import plotly.graph_objects as go
-import plotly.express as px
-import plotly.offline as pyo
-import pandas as pd
-from PIL import Image # new import
+from plotly.subplots import make_subplots
 
-# Create Chart And Percentile Metrics
-df = pd.read_csv('metrics.csv')
-df = df[(df['t'] > "2012-01-01")]
+# Create a subplot with 2 rows and 2 columns, and add subplot titles
+fig = make_subplots(rows=2, cols=2, subplot_titles=["Perps Funding Rate", "Skew 1M 30d Change",
+                                                    "STH Price Cross", "STHLTH Ratio 14d Change"],
+                    row_heights=[0.8, 0.8])
 
-df['test'] = df.rhodl_ratio.rank(pct = True)
-df['test2'] = df.mvrv_z_score.rank(pct = True)
-df['200davg'] = df.price_usd_close.rolling(window=200).mean()
-df['200wavg'] = df.price_usd_close.rolling(window=1400).mean()
-df['rhodl_percentile'] = df.rhodl_ratio.rank(pct = True)
-df['mvrv_z_percentile'] = df.mvrv_z_score.rank(pct = True)
-df['reserve_risk_percentile'] = df.reserve_risk.rank(pct = True)
-df['puell_multiple_percentile'] = df.puell_multiple.rank(pct = True)
-df['nupl_percentile'] = df.net_unrealized_profit_loss.rank(pct = True)
+# Function to convert color to pastel shade
+def pastel_color(hex_color):
+    r, g, b = tuple(int(hex_color[i:i+2], 16) for i in (0, 2, 4))
+    return f"rgba({r}, {g}, {b}, 0.5)"
 
-img = Image.open('LOGOsmall.png') # image path
+# Chart 1 (Top-left) - Replicating Chart 1 from the previous code
+for index, row in df.iterrows():
+    color = pastel_color('008000') if row['funding'] >= 0 else pastel_color('FF0000')
+    trace = go.Scatter(x=[row['date'], row['date']], y=[0, row['funding']], mode='lines', name='',
+                       line=dict(color=color), showlegend=False)  # Hide legend entry for Chart 1
+    fig.add_trace(trace, row=1, col=1)
 
-df2 = df[['t', 'rhodl_percentile', 'mvrv_z_percentile', 'reserve_risk_percentile','puell_multiple_percentile', 'nupl_percentile']]
+# Add static second line at y=-0.000052 - Replicating static line for Chart 1
+static_line_y = [-0.000052] * len(df['date'])
+trace2_static_line = go.Scatter(x=df['date'], y=static_line_y, mode='lines', name='',
+                               line=dict(color=pastel_color('000080'), dash='dash'), showlegend=False)  # Hide legend entry for Static Line
+fig.add_trace(trace2_static_line, row=1, col=1)
 
-# Define the heatmap trace
-trace = go.Heatmap(x=df2['t'], y=df2.columns[1:], z=df2.iloc[:, 1:].values.T, colorscale='RdYlGn', dy=10, reversescale=True)
+# Chart 2 (Top-right) - Original Chart 2
+for index, row in df.iterrows():
+    color = pastel_color('008000') if row['skew_chg'] >= 0 else pastel_color('FF0000')
+    trace = go.Scatter(x=[row['date'], row['date']], y=[0, row['skew_chg']], mode='lines', name='',
+                       line=dict(color=color), showlegend=False)  # Hide legend entry for Chart 2
+    fig.add_trace(trace, row=1, col=2)
 
-# Define the layout
-heatlayout = go.Layout(title='BTC On-Chain Cycle Metrics Heatmap by Percentile')
+# Add static second line at y=12 for Chart 2
+static_line_skew = [12] * len(df['date'])
+skew_static_line = go.Scatter(x=df['date'], y=static_line_skew, mode='lines', name='',
+                              line=dict(color=pastel_color('000080'), dash='dash'), showlegend=False)  # Hide legend entry for Static Line
+fig.add_trace(skew_static_line, row=1, col=2)
 
-pricelayout = go.Layout(
-    title="Data",
-    plot_bgcolor="#FFF",  # Sets background color to white
-    xaxis=dict(
-        title="time",
-        linecolor="#BCCCDC",  # Sets color of X-axis line
-        showgrid=False  # Removes X-axis grid lines
-    ),
-    yaxis=dict(
-        title="price",  
-        linecolor="#BCCCDC",  # Sets color of Y-axis line
-        showgrid=False,  # Removes Y-axis grid lines    
-    )
-)
+# Chart 3 (Bottom-left) - Reflecting variable 'sth' in Chart 3
+for index, row in df.iterrows():
+    color = pastel_color('008000') if row['sth'] >= 98 else pastel_color('FF0000')
+    trace = go.Scatter(x=[row['date'], row['date']], y=[0, row['sth']], mode='lines', name='',
+                       line=dict(color=color), showlegend=False)  # Hide legend entry for Chart 3
+    fig.add_trace(trace, row=2, col=1)
 
-fig3 = go.Figure(
-    data=go.Scatter(x=df['t'],y=df['price_usd_close'], name = 'price'),
-    layout=pricelayout
-) 
+# Add static second line at y=98 for Chart 3
+static_line_sth = [98] * len(df['date'])
+sth_static_line = go.Scatter(x=df['date'], y=static_line_sth, mode='lines', name='',
+                             line=dict(color=pastel_color('000080'), dash='dash'), showlegend=False)  # Hide legend entry for Static Line
+fig.add_trace(sth_static_line, row=2, col=1)
 
-# Create the figure object and plot it
-fig = go.Figure(data=[trace], layout=heatlayout)
-##fig.layout.height = 800
-#pyo.plot(fig, filename='heatmap.html')
+# Chart 4 (Bottom-right) - Reflecting variable 'change14' in Chart 4
+for index, row in df.iterrows():
+    color = pastel_color('008000') if row['change14'] >= 0 else pastel_color('FF0000')
+    trace = go.Scatter(x=[row['date'], row['date']], y=[0, row['change14']], mode='lines', name='',
+                       line=dict(color=color), showlegend=False)  # Hide legend entry for Chart 4
+    fig.add_trace(trace, row=2, col=2)
 
-# defined to source
-fig3.add_layout_image(
-    dict(
-        source=img,
-        xref="paper", yref="paper",
-        x=0.5, y=0.24,
-        sizex=0.5, sizey=0.6,
-        xanchor="center",
-        yanchor="bottom",
-        opacity=0.25
-    )
-)
-fig3.update_yaxes(type='log')
-fig3.add_trace(go.Scatter(x=df['t'], y=df['price_realized_usd'], name = 'Realized Price'))
-fig3.add_trace(go.Scatter(x=df['t'], y=df['200davg'], name = '200d avg'))
-fig3.add_trace(go.Scatter(x=df['t'], y=df['200wavg'], name = '200w avg'))
-title_text = "BTC Price Versus Key Price Levels"
-fig3.update_layout(title=title_text)
+# Add static second line at y=0 for Chart 4
+static_line_change14 = [1] * len(df['date'])
+change14_static_line = go.Scatter(x=df['date'], y=static_line_change14, mode='lines', name='',
+                                  line=dict(color=pastel_color('000080'), dash='dash'), showlegend=False)  # Hide legend entry for Static Line
+fig.add_trace(change14_static_line, row=2, col=2)
 
-fig3.update_yaxes(fixedrange=False)
+# Update layout and axis labels
+fig.update_layout(title_text="UTXO Strategy Dashboard", height=800, plot_bgcolor='rgb(240, 240, 240)',
+                  font_family='Arial', font_size=14)
 
-#Dash Example
-external_stylesheets = ['https://codepen.io/chriddyp/pen/bWLwgP.css']
- 
-app = dash.Dash(__name__, external_stylesheets=external_stylesheets)
-server = app.server
- 
-colors = {
-    'background': '#F0F8FF',
-    'text': '#00008B'
-}
+# Add annotations at the bottom of the charts
+note_text = "Blue dotted lines are entry triggers"
+color_note_text = "Green: Positive values | Red: Negative values"
+fig.add_annotation(xref='paper', yref='paper', x=0.5, y=-0.10, text=note_text,
+                   showarrow=False, font=dict(size=12), align='center')
+fig.add_annotation(xref='paper', yref='paper', x=0.5, y=-0.13, text=color_note_text,
+                   showarrow=False, font=dict(size=12), align='center')
 
-app.layout = html.Div(className='row', children=[
-    html.H1("BM PRO Dashboard MVP"),
-    html.Div(children=[
-        dcc.Graph(id="graph1", figure=fig3, style={'display': 'inline-block'}),
-        dcc.Graph(id="graph2", figure=fig, style={'display': 'inline-block'})
-        
-     ]),
-    html.Div(children=[
-        dcc.Graph(id="graph3", figure=fig3, style={'display': 'inline-block'}),
-        dcc.Graph(id="graph4", figure=fig, style={'display': 'inline-block'})
-    ])
+# Show the dashboard
+fig.show()
+
+
+# Create the Dash app
+app = dash.Dash(__name__)
+
+# Define the layout of the app
+app.layout = html.Div([
+    dcc.Graph(figure=fig)
 ])
 
 if __name__ == '__main__':
-    app.run_server(debug=False)
-    
+    app.run_server(debug=True)
