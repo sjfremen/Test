@@ -92,39 +92,7 @@ def get_inflow(indicator, asset):
     return data  # Add this line to return the created DataFrame
 
 if __name__ == "__main__":
-    # Fetch supply data for USDC, USDT, BUSD, TUSD, and DAI
-    supply_usdc = get_stables('supply', 'USDC')
-    supply_usdt = get_stables('supply', 'USDT')
-    supply_busd = get_stables('supply', 'BUSD')
-    supply_tusd = get_stables('supply', 'TUSD')
-    supply_dai = get_stables('supply', 'DAI')
-
-    # Fetch inflow data for USDC, USDT, BUSD, TUSD, and DAI
-    inflow_usdc = get_inflow('inflow', 'USDC')
-    inflow_usdt = get_inflow('inflow', 'USDT')
-    inflow_busd = get_inflow('inflow', 'BUSD')
-    inflow_tusd = get_inflow('inflow', 'TUSD')
-    inflow_dai = get_inflow('inflow', 'DAI')
-
-    # Merge the supply and inflow data into a single DataFrame based on the 'date_merge' column
-    merged_data = pd.merge(supply_usdc, supply_usdt, on='date_merge', how='outer')
-    merged_data = pd.merge(merged_data, supply_busd, on='date_merge', how='outer')
-    merged_data = pd.merge(merged_data, supply_tusd, on='date_merge', how='outer')
-    merged_data = pd.merge(merged_data, supply_dai, on='date_merge', how='outer')
-    merged_data = pd.merge(merged_data, inflow_usdc, on='date_merge', how='outer')
-    merged_data = pd.merge(merged_data, inflow_usdt, on='date_merge', how='outer')
-    merged_data = pd.merge(merged_data, inflow_busd, on='date_merge', how='outer')
-    merged_data = pd.merge(merged_data, inflow_tusd, on='date_merge', how='outer')
-    merged_data = pd.merge(merged_data, inflow_dai, on='date_merge', how='outer')
-    
-    # Calculate the total inflow for all stablecoins
-    merged_data['total_inflow'] = merged_data[['inflow_USDC', 'inflow_USDT']].sum(axis=1) #'inflow_BUSD', 'inflow_TUSD', 'inflow_DAI']].sum(axis=1)
-
-    # Calculate the total circulating supply for all stablecoins
-    merged_data['total_supply'] = merged_data[['supply_USDC', 'supply_USDT']].sum(axis=1) #'supply_BUSD', 'supply_TUSD', 'supply_DAI']].sum(axis=1)
-
-    # Calculate the inflow_supply ratio
-    merged_data['inflow_supply'] = (merged_data['total_inflow'] / merged_data['total_supply'])*100
+    # ... (previous code)
 
     # Merge the OHLC data into the merged_data DataFrame based on the 'date_merge' column
     #merged_data = pd.merge(merged_data, ohlc_data, on='date_merge', how='outer')
@@ -132,36 +100,37 @@ if __name__ == "__main__":
     merged_data = merged_data.drop(['date_x', 'date_y'], axis=1)
     df = merged_data
 
-ohlc = get_glassnode('ohlc')
-funding = get_glassnode('funding')
-skew1m = get_glassnode('skew1m')
-sth = get_glassnode('STHMVRV')
-lth = get_glassnode('LTHMVRV')
-hash_rate = get_glassnode('hash_rate')
-basis = get_glassnode('basis')
+    ohlc = get_glassnode('ohlc')
+    funding = get_glassnode('funding')
+    skew1m = get_glassnode('skew1m')
+    sth = get_glassnode('STHMVRV')
+    lth = get_glassnode('LTHMVRV')
+    hash_rate = get_glassnode('hash_rate')
+    basis = get_glassnode('basis')
 
-df = ohlc.merge(funding, on="date_merge", how="left")
-df = df.merge(skew1m, on="date_merge",how="left")
-df = df.merge(sth, on="date_merge",how="left")
-df = df.merge(lth,on="date_merge",how="left")
-df = df.merge(hash_rate,on="date_merge",how="left")
-df = df.merge(basis,on="date_merge",how="left")
-df = df.merge(merged_data,on="date_merge",how="left")
+    df = ohlc.merge(funding, on="date_merge", how="left")
+    df = df.merge(skew1m, on="date_merge",how="left")
+    df = df.merge(sth, on="date_merge",how="left")
+    df = df.merge(lth,on="date_merge",how="left")
+    df = df.merge(hash_rate,on="date_merge",how="left")
+    df = df.merge(basis,on="date_merge",how="left")
+    df = df.merge(merged_data,on="date_merge",how="left")  # Moved inside the __name__ block
 
-df['date'] = pd.to_datetime(df['date_merge'])
-df = df.drop(['date_x', 'date_y','date_merge'], axis=1)
-df['skew_100'] = df['skew1m']*100
-df['skew_chg'] = df['skew_100'].diff(periods=30)
-df['sth'] = df['STHMVRV']*100
-df['ratio'] = (df['Close']/df['STHMVRV'])/(df['Close']/df['LTHMVRV'])
-df['change14'] = df['ratio'].pct_change(periods = 14)*100
-df['hash_30'] = df['hash_rate'].rolling(window=30).mean()
-df['hash_60'] = df['hash_rate'].rolling(window=60).mean()
-df['hashcross'] = (df['hash_30']/df['hash_60'])*100
-df['basis_30'] = (df['basis'].diff(periods=30))*100
+    df['date'] = pd.to_datetime(df['date_merge'])
+    df = df.drop(['date_x', 'date_y','date_merge'], axis=1)
+    df['skew_100'] = df['skew1m']*100
+    df['skew_chg'] = df['skew_100'].diff(periods=30)
+    df['sth'] = df['STHMVRV']*100
+    df['ratio'] = (df['Close']/df['STHMVRV'])/(df['Close']/df['LTHMVRV'])
+    df['change14'] = df['ratio'].pct_change(periods = 14)*100
+    df['hash_30'] = df['hash_rate'].rolling(window=30).mean()
+    df['hash_60'] = df['hash_rate'].rolling(window=60).mean()
+    df['hashcross'] = (df['hash_30']/df['hash_60'])*100
+    df['basis_30'] = (df['basis'].diff(periods=30))*100
 
-df.to_csv('dash.csv')
-metric_cleaned = df['funding'].dropna()
+    df.to_csv('dash.csv')
+    metric_cleaned = df['funding'].dropna()
+
 
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
