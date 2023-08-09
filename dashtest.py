@@ -132,9 +132,6 @@ if __name__ == "__main__":
     merged_data = merged_data.drop(['date_x', 'date_y'], axis=1)
     df = merged_data
 
-merged_data.to_csv('stablecoins.csv')
-
-
 ohlc = get_glassnode('ohlc')
 funding = get_glassnode('funding')
 skew1m = get_glassnode('skew1m')
