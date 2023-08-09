@@ -53,6 +53,87 @@ def get_glassnode(indicator):
   # mvrv_data.head()
   return mvrv_data
 
+def get_stables(indicator, asset):
+    endpoints = {
+        'supply': 'supply/current'
+    }
+
+    url = f"https://api.glassnode.com/v1/metrics/{endpoints[indicator]}?api_key={api_key}&s={start_date}&i=24h&a={asset}"
+    response = requests.get(url)
+
+    if response.status_code != 200:
+        raise ValueError(f"Error fetching data: {response.status_code}")
+
+    data = pd.DataFrame(response.json())
+    data = data.rename(columns={'v': f'{indicator}_{asset}'})
+    data['date'] = pd.to_datetime(data['t'], unit='s').dt.strftime('%Y-%m-%d %H:%M:%S')
+    data['date_merge'] = pd.to_datetime(data['date'])
+    data = data.drop(['t'], axis=1)
+
+    return data  # Add this line to return the created DataFrame
+
+def get_inflow(indicator, asset):
+    endpoints = {
+        'inflow': 'transactions/transfers_volume_to_exchanges_sum'
+    }
+
+    url = f"https://api.glassnode.com/v1/metrics/{endpoints[indicator]}?api_key={api_key}&s={start_date}&i=24h&a={asset}"
+    response = requests.get(url)
+
+    if response.status_code != 200:
+        raise ValueError(f"Error fetching data: {response.status_code}")
+
+    data = pd.DataFrame(response.json())
+    data = data.rename(columns={'v': f'{indicator}_{asset}'})
+    data['date'] = pd.to_datetime(data['t'], unit='s').dt.strftime('%Y-%m-%d %H:%M:%S')
+    data['date_merge'] = pd.to_datetime(data['date'])
+    data = data.drop(['t'], axis=1)
+
+    return data  # Add this line to return the created DataFrame
+
+if __name__ == "__main__":
+    # Fetch supply data for USDC, USDT, BUSD, TUSD, and DAI
+    supply_usdc = get_stables('supply', 'USDC')
+    supply_usdt = get_stables('supply', 'USDT')
+    supply_busd = get_stables('supply', 'BUSD')
+    supply_tusd = get_stables('supply', 'TUSD')
+    supply_dai = get_stables('supply', 'DAI')
+
+    # Fetch inflow data for USDC, USDT, BUSD, TUSD, and DAI
+    inflow_usdc = get_inflow('inflow', 'USDC')
+    inflow_usdt = get_inflow('inflow', 'USDT')
+    inflow_busd = get_inflow('inflow', 'BUSD')
+    inflow_tusd = get_inflow('inflow', 'TUSD')
+    inflow_dai = get_inflow('inflow', 'DAI')
+
+    # Merge the supply and inflow data into a single DataFrame based on the 'date_merge' column
+    merged_data = pd.merge(supply_usdc, supply_usdt, on='date_merge', how='outer')
+    merged_data = pd.merge(merged_data, supply_busd, on='date_merge', how='outer')
+    merged_data = pd.merge(merged_data, supply_tusd, on='date_merge', how='outer')
+    merged_data = pd.merge(merged_data, supply_dai, on='date_merge', how='outer')
+    merged_data = pd.merge(merged_data, inflow_usdc, on='date_merge', how='outer')
+    merged_data = pd.merge(merged_data, inflow_usdt, on='date_merge', how='outer')
+    merged_data = pd.merge(merged_data, inflow_busd, on='date_merge', how='outer')
+    merged_data = pd.merge(merged_data, inflow_tusd, on='date_merge', how='outer')
+    merged_data = pd.merge(merged_data, inflow_dai, on='date_merge', how='outer')
+    
+    # Calculate the total inflow for all stablecoins
+    merged_data['total_inflow'] = merged_data[['inflow_USDC', 'inflow_USDT']].sum(axis=1) #'inflow_BUSD', 'inflow_TUSD', 'inflow_DAI']].sum(axis=1)
+
+    # Calculate the total circulating supply for all stablecoins
+    merged_data['total_supply'] = merged_data[['supply_USDC', 'supply_USDT']].sum(axis=1) #'supply_BUSD', 'supply_TUSD', 'supply_DAI']].sum(axis=1)
+
+    # Calculate the inflow_supply ratio
+    merged_data['inflow_supply'] = (merged_data['total_inflow'] / merged_data['total_supply'])*100
+
+    # Merge the OHLC data into the merged_data DataFrame based on the 'date_merge' column
+    #merged_data = pd.merge(merged_data, ohlc_data, on='date_merge', how='outer')
+    merged_data['date'] = pd.to_datetime(merged_data['date_merge'])
+    merged_data = merged_data.drop(['date_x', 'date_y'], axis=1)
+    df = merged_data
+
+merged_data.to_csv('stablecoins.csv')
+
 
 ohlc = get_glassnode('ohlc')
 funding = get_glassnode('funding')
@@ -68,6 +149,7 @@ df = df.merge(sth, on="date_merge",how="left")
 df = df.merge(lth,on="date_merge",how="left")
 df = df.merge(hash_rate,on="date_merge",how="left")
 df = df.merge(basis,on="date_merge",how="left")
+df = df.merge(merged_data,on="date_merge",how="left")
 
 df['date'] = pd.to_datetime(df['date_merge'])
 df = df.drop(['date_x', 'date_y','date_merge'], axis=1)
@@ -89,11 +171,12 @@ from plotly.subplots import make_subplots
 
 # Create a subplot with 2 rows and 2 columns, and add subplot titles
 fig = make_subplots(
-    rows=3, cols=2,
+    rows=4, cols=2,
     subplot_titles=["Perps Funding Rate", "Skew 1M 30d Change",
                     "STH Price Cross", "STHLTH Ratio 14d Change",
-                    "Hash Ribbons", 'Funding Basis 30d Change'],
-    row_heights=[0.8, 0.8, 0.8],
+                    "Hash Ribbons", 'Funding Basis 30d Change',
+                    "Stablecoin Inflows USDT & USDC"],
+    row_heights=[0.8, 0.8, 0.8, 0.8],
     vertical_spacing=0.1,  # Adjust the vertical spacing between subplots
 )
 
@@ -180,6 +263,19 @@ chart6_static_line = go.Scatter(x=df['date'], y=static_line_chart6, mode='lines'
                                 line=dict(color=pastel_color('000080'), dash='dash'), showlegend=False)
 fig.add_trace(chart6_static_line, row=3, col=2)
 
+#Chart 7 
+for index, row in df.iterrows():
+    color = pastel_color('008000') if row['inflow_supply'] >= 0 else pastel_color('FF0000')
+    trace = go.Scatter(x=[row['date'], row['date']], y=[0, row['inflow_supply']], mode='lines', name='',
+                       line=dict(color=color), showlegend=False)  # Hide legend entry for Chart 7
+    fig.add_trace(trace, row=4, col=1)
+
+# Add static line for Chart 7
+static_line_chart7 = [3] * len(df['date'])
+chart7_static_line = go.Scatter(x=df['date'], y=static_line_chart7, mode='lines', name='',
+                                line=dict(color=pastel_color('000080'), dash='dash'), showlegend=False)
+fig.add_trace(chart7_static_line, row=4, col=1)
+
 # Update layout and axis labels
 fig.update_layout(
     title_text="UTXO Strategy Dashboard",
@@ -213,23 +309,3 @@ fig.update_yaxes(tickfont=dict(size=12))
 
 # Show the dashboard
 fig.show()
-
-
-
-# Create the Dash app
-app = dash.Dash(__name__)
-server = app.server
-
-# Define the layout of the app
-app.layout = html.Div([
-    dcc.Graph(id='output-graph', figure=fig)  # The figure is initially set to the 'fig' you defined earlier
-])
-
-@app.callback(
-    dash.dependencies.Output('output-graph', 'figure'),
-)
-def update_graph():
-    return fig
-
-if __name__ == '__main__':
-    app.run_server(debug=False)
