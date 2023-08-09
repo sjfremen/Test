@@ -306,3 +306,21 @@ fig.update_yaxes(tickfont=dict(size=12))
 
 # Show the dashboard
 fig.show()
+
+# Create the Dash app
+app = dash.Dash(__name__)
+server = app.server
+
+# Define the layout of the app
+app.layout = html.Div([
+    dcc.Graph(id='output-graph', figure=fig)  # The figure is initially set to the 'fig' you defined earlier
+])
+
+@app.callback(
+    dash.dependencies.Output('output-graph', 'figure'),
+)
+def update_graph():
+    return fig
+
+if __name__ == '__main__':
+    app.run_server(debug=False)
