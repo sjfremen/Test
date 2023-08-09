@@ -127,7 +127,7 @@ if __name__ == "__main__":
 
     # Create the Dash app
     app = dash.Dash(__name__)
-    server = app.server
+    #server = app.server
 
     # Define the layout of the app
     app.layout = html.Div([
