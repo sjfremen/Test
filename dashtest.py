@@ -285,8 +285,14 @@ app.layout = html.Div([
 @app.callback(
     dash.dependencies.Output('output-graph', 'figure'),
 )
-def update_graph():
+def update_graph(df):  # Pass the 'df' DataFrame as an argument
+    # You can continue using the 'df' DataFrame here for any updates or calculations you need
+    # For now, let's just return the same figure
     return fig
 
 if __name__ == '__main__':
+    # Load the 'df' DataFrame here
+    df = pd.read_csv('dash.csv')
+
     app.run_server(debug=False)
+
