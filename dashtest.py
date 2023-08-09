@@ -53,228 +53,183 @@ def get_glassnode(indicator):
   # mvrv_data.head()
   return mvrv_data
 
-def get_stables(indicator, asset):
-    endpoints = {
-        'supply': 'supply/current'
-    }
 
-    url = f"https://api.glassnode.com/v1/metrics/{endpoints[indicator]}?api_key={api_key}&s={start_date}&i=24h&a={asset}"
-    response = requests.get(url)
+ohlc = get_glassnode('ohlc')
+funding = get_glassnode('funding')
+skew1m = get_glassnode('skew1m')
+sth = get_glassnode('STHMVRV')
+lth = get_glassnode('LTHMVRV')
+hash_rate = get_glassnode('hash_rate')
+basis = get_glassnode('basis')
 
-    if response.status_code != 200:
-        raise ValueError(f"Error fetching data: {response.status_code}")
+df = ohlc.merge(funding, on="date_merge", how="left")
+df = df.merge(skew1m, on="date_merge",how="left")
+df = df.merge(sth, on="date_merge",how="left")
+df = df.merge(lth,on="date_merge",how="left")
+df = df.merge(hash_rate,on="date_merge",how="left")
+df = df.merge(basis,on="date_merge",how="left")
 
-    data = pd.DataFrame(response.json())
-    data = data.rename(columns={'v': f'{indicator}_{asset}'})
-    data['date'] = pd.to_datetime(data['t'], unit='s').dt.strftime('%Y-%m-%d %H:%M:%S')
-    data['date_merge'] = pd.to_datetime(data['date'])
-    data = data.drop(['t'], axis=1)
+df['date'] = pd.to_datetime(df['date_merge'])
+df = df.drop(['date_x', 'date_y','date_merge'], axis=1)
+df['skew_100'] = df['skew1m']*100
+df['skew_chg'] = df['skew_100'].diff(periods=30)
+df['sth'] = df['STHMVRV']*100
+df['ratio'] = (df['Close']/df['STHMVRV'])/(df['Close']/df['LTHMVRV'])
+df['change14'] = df['ratio'].pct_change(periods = 14)*100
+df['hash_30'] = df['hash_rate'].rolling(window=30).mean()
+df['hash_60'] = df['hash_rate'].rolling(window=60).mean()
+df['hashcross'] = (df['hash_30']/df['hash_60'])*100
+df['basis_30'] = (df['basis'].diff(periods=30))*100
 
-    return data  # Add this line to return the created DataFrame
+df.to_csv('dash.csv')
+metric_cleaned = df['funding'].dropna()
 
-def get_inflow(indicator, asset):
-    endpoints = {
-        'inflow': 'transactions/transfers_volume_to_exchanges_sum'
-    }
+import plotly.graph_objects as go
+from plotly.subplots import make_subplots
 
-    url = f"https://api.glassnode.com/v1/metrics/{endpoints[indicator]}?api_key={api_key}&s={start_date}&i=24h&a={asset}"
-    response = requests.get(url)
+# Create a subplot with 2 rows and 2 columns, and add subplot titles
+fig = make_subplots(
+    rows=3, cols=2,
+    subplot_titles=["Perps Funding Rate", "Skew 1M 30d Change",
+                    "STH Price Cross", "STHLTH Ratio 14d Change",
+                    "Hash Ribbons", 'Funding Basis 30d Change'],
+    row_heights=[0.8, 0.8, 0.8],
+    vertical_spacing=0.1,  # Adjust the vertical spacing between subplots
+)
 
-    if response.status_code != 200:
-        raise ValueError(f"Error fetching data: {response.status_code}")
+# Function to convert color to pastel shade
+def pastel_color(hex_color):
+    r, g, b = tuple(int(hex_color[i:i+2], 16) for i in (0, 2, 4))
+    return f"rgba({r}, {g}, {b}, 0.5)"
 
-    data = pd.DataFrame(response.json())
-    data = data.rename(columns={'v': f'{indicator}_{asset}'})
-    data['date'] = pd.to_datetime(data['t'], unit='s').dt.strftime('%Y-%m-%d %H:%M:%S')
-    data['date_merge'] = pd.to_datetime(data['date'])
-    data = data.drop(['t'], axis=1)
+# Chart 1
+for index, row in df.iterrows():
+    color = pastel_color('008000') if row['funding'] >= 0 else pastel_color('FF0000')
+    trace = go.Scatter(x=[row['date'], row['date']], y=[0, row['funding']], mode='lines', name='',
+                       line=dict(color=color), showlegend=False)  # Hide legend entry for Chart 1
+    fig.add_trace(trace, row=1, col=1)
 
-    return data  # Add this line to return the created DataFrame
+# Add static second line at y=-0.000052 - Replicating static line for Chart 1
+static_line_y = [-0.000052] * len(df['date'])
+trace2_static_line = go.Scatter(x=df['date'], y=static_line_y, mode='lines', name='',
+                               line=dict(color=pastel_color('000080'), dash='dash'), showlegend=False)  # Hide legend entry for Static Line
+fig.add_trace(trace2_static_line, row=1, col=1)
 
-if __name__ == "__main__":
-    # ... (previous data preparation code)
+# Chart 2 
+for index, row in df.iterrows():
+    color = pastel_color('008000') if row['skew_chg'] >= 0 else pastel_color('FF0000')
+    trace = go.Scatter(x=[row['date'], row['date']], y=[0, row['skew_chg']], mode='lines', name='',
+                       line=dict(color=color), showlegend=False)  # Hide legend entry for Chart 2
+    fig.add_trace(trace, row=1, col=2)
 
-    ohlc = get_glassnode('ohlc')
-    funding = get_glassnode('funding')
-    skew1m = get_glassnode('skew1m')
-    sth = get_glassnode('STHMVRV')
-    lth = get_glassnode('LTHMVRV')
-    hash_rate = get_glassnode('hash_rate')
-    basis = get_glassnode('basis')
+# Add static second line at y=12 for Chart 2
+static_line_skew = [12] * len(df['date'])
+skew_static_line = go.Scatter(x=df['date'], y=static_line_skew, mode='lines', name='',
+                              line=dict(color=pastel_color('000080'), dash='dash'), showlegend=False)  # Hide legend entry for Static Line
+fig.add_trace(skew_static_line, row=1, col=2)
 
-    df = ohlc.merge(funding, on="date_merge", how="left")
-    df = df.merge(skew1m, on="date_merge", how="left")
-    df = df.merge(sth, on="date_merge", how="left")
-    df = df.merge(lth, on="date_merge", how="left")
-    df = df.merge(hash_rate, on="date_merge", how="left")
-    df = df.merge(basis, on="date_merge", how="left")
-    df = df.merge(merged_data, on="date_merge", how="left")
+# Chart 3
+for index, row in df.iterrows():
+    color = pastel_color('008000') if row['sth'] >= 100 else pastel_color('FF0000')
+    trace = go.Scatter(x=[row['date'], row['date']], y=[0, row['sth']], mode='lines', name='',
+                       line=dict(color=color), showlegend=False)  # Hide legend entry for Chart 3
+    fig.add_trace(trace, row=2, col=1)
 
-    df['date'] = pd.to_datetime(df['date_merge'])
-    df = df.drop(['date_x', 'date_y', 'date_merge'], axis=1)
-    df['skew_100'] = df['skew1m'] * 100
-    df['skew_chg'] = df['skew_100'].diff(periods=30)
-    df['sth'] = df['STHMVRV'] * 100
-    df['ratio'] = (df['Close'] / df['STHMVRV']) / (df['Close'] / df['LTHMVRV'])
-    df['change14'] = df['ratio'].pct_change(periods=14) * 100
-    df['hash_30'] = df['hash_rate'].rolling(window=30).mean()
-    df['hash_60'] = df['hash_rate'].rolling(window=60).mean()
-    df['hashcross'] = (df['hash_30'] / df['hash_60']) * 100
-    df['basis_30'] = (df['basis'].diff(periods=30)) * 100
+# Add static second line at y=98 for Chart 3
+static_line_sth = [100] * len(df['date'])
+sth_static_line = go.Scatter(x=df['date'], y=static_line_sth, mode='lines', name='',
+                             line=dict(color=pastel_color('000080'), dash='dash'), showlegend=False)  # Hide legend entry for Static Line
+fig.add_trace(sth_static_line, row=2, col=1)
 
-    df.to_csv('dash.csv')
-    metric_cleaned = df['funding'].dropna()
+# Chart 4 
+for index, row in df.iterrows():
+    color = pastel_color('008000') if row['change14'] >= 0 else pastel_color('FF0000')
+    trace = go.Scatter(x=[row['date'], row['date']], y=[0, row['change14']], mode='lines', name='',
+                       line=dict(color=color), showlegend=False)  # Hide legend entry for Chart 4
+    fig.add_trace(trace, row=2, col=2)
 
-    # Create the Dash app
-    app = dash.Dash(__name__)
-    #server = app.server
+# Add static second line at y=0 for Chart 4
+static_line_change14 = [1] * len(df['date'])
+change14_static_line = go.Scatter(x=df['date'], y=static_line_change14, mode='lines', name='',
+                                  line=dict(color=pastel_color('000080'), dash='dash'), showlegend=False)  # Hide legend entry for Static Line
+fig.add_trace(change14_static_line, row=2, col=2)
 
-    # Define the layout of the app
-    app.layout = html.Div([
-        dcc.Graph(id='output-graph')  # Placeholder for the graph
-    ])
+# Chart 5 
+for index, row in df.iterrows():
+    color = pastel_color('008000') if row['hashcross'] >= 100 else pastel_color('FF0000')
+    trace = go.Scatter(x=[row['date'], row['date']], y=[0, row['hashcross']], mode='lines', name='',
+                       line=dict(color=color), showlegend=False)  # Hide legend entry for Chart 4
+    fig.add_trace(trace, row=3, col=1)
+    
+# Add static second line at y=0 for Chart 5
+static_line_chart5 = [100] * len(df['date'])
+chart5_static_line = go.Scatter(x=df['date'], y=static_line_chart5, mode='lines', name='',
+                                line=dict(color=pastel_color('000080'), dash='dash'), showlegend=False)
+fig.add_trace(chart5_static_line, row=3, col=1)
 
-    @app.callback(
-        dash.dependencies.Output('output-graph', 'figure'),
-    )
-    def update_graph():
-        # Create a subplot with 2 rows and 2 columns, and add subplot titles
-        fig = make_subplots(
-            rows=4, cols=2,
-            subplot_titles=["Perps Funding Rate", "Skew 1M 30d Change",
-                            "STH Price Cross", "STHLTH Ratio 14d Change",
-                            "Hash Ribbons", 'Funding Basis 30d Change',
-                            "Stablecoin Inflows USDT & USDC"],
-            row_heights=[0.8, 0.8, 0.8, 0.8],
-            vertical_spacing=0.1  # Adjust the vertical spacing between subplots
-        )
+# Chart 6 
+for index, row in df.iterrows():
+    color = pastel_color('008000') if row['basis_30'] >= 0 else pastel_color('FF0000')
+    trace = go.Scatter(x=[row['date'], row['date']], y=[0, row['basis_30']], mode='lines', name='',
+                       line=dict(color=color), showlegend=False)  # Hide legend entry for Chart 4
+    fig.add_trace(trace, row=3, col=2)
+    
+# Add static line for Chart 6
+static_line_chart6 = [3] * len(df['date'])
+chart6_static_line = go.Scatter(x=df['date'], y=static_line_chart6, mode='lines', name='',
+                                line=dict(color=pastel_color('000080'), dash='dash'), showlegend=False)
+fig.add_trace(chart6_static_line, row=3, col=2)
 
-        # Function to convert color to pastel shade
-        def pastel_color(hex_color):
-            r, g, b = tuple(int(hex_color[i:i + 2], 16) for i in (0, 2, 4))
-            return f"rgba({r}, {g}, {b}, 0.5)"
+# Update layout and axis labels
+fig.update_layout(
+    title_text="UTXO Strategy Dashboard",
+    height=1000,  # Increased height to create space for annotations
+    plot_bgcolor='rgb(240, 240, 240)',
+    font_family='Arial',
+    font_size=20,
+)
 
-        # Chart 1
-        for index, row in df.iterrows():
-            color = pastel_color('008000') if row['funding'] >= 0 else pastel_color('FF0000')
-            trace = go.Scatter(x=[row['date'], row['date']], y=[0, row['funding']], mode='lines', name='',
-                               line=dict(color=color), showlegend=False)  # Hide legend entry for Chart 1
-            fig.add_trace(trace, row=1, col=1)
+# Update X-axis range for all subplots in the 1st column to start from 1/1/2023
+for i in range(1, 4):
+    fig.update_xaxes(range=["2023-01-01", df['date'].max()], row=i, col=1)
 
-        # Add static second line at y=-0.000052 - Replicating static line for Chart 1
-        static_line_y = [-0.000052] * len(df['date'])
-        trace2_static_line = go.Scatter(x=df['date'], y=static_line_y, mode='lines', name='',
-                                       line=dict(color=pastel_color('000080'), dash='dash'), showlegend=False)  # Hide legend entry for Static Line
-        fig.add_trace(trace2_static_line, row=1, col=1)
+# Update X-axis range for all subplots in the 2nd column to start from 1/1/2023
+for i in range(1, 4):
+    fig.update_xaxes(range=["2023-01-01", df['date'].max()], row=i, col=2)
 
-        # Chart 2 
-        for index, row in df.iterrows():
-            color = pastel_color('008000') if row['skew_chg'] >= 0 else pastel_color('FF0000')
-            trace = go.Scatter(x=[row['date'], row['date']], y=[0, row['skew_chg']], mode='lines', name='',
-                               line=dict(color=color), showlegend=False)  # Hide legend entry for Chart 2
-            fig.add_trace(trace, row=1, col=2)
+# Update Y Axis Across Charts
+fig.update_yaxes(range=[90, 110], row=3, col=1)
+fig.update_yaxes(range=[50, 150], row=2, col=1)
 
-        # Add static second line at y=12 for Chart 2
-        static_line_skew = [12] * len(df['date'])
-        skew_static_line = go.Scatter(x=df['date'], y=static_line_skew, mode='lines', name='',
-                                      line=dict(color=pastel_color('000080'), dash='dash'), showlegend=False)  # Hide legend entry for Static Line
-        fig.add_trace(skew_static_line, row=1, col=2)
+# Add annotations at the bottom of the charts
+note_text = "Green: Positive values | Red: Negative values | Blue lines: Entry triggers"
 
-        # Chart 3
-        for index, row in df.iterrows():
-            color = pastel_color('008000') if row['sth'] >= 100 else pastel_color('FF0000')
-            trace = go.Scatter(x=[row['date'], row['date']], y=[0, row['sth']], mode='lines', name='',
-                               line=dict(color=color), showlegend=False)  # Hide legend entry for Chart 3
-            fig.add_trace(trace, row=2, col=1)
+fig.add_annotation(xref='paper', yref='paper',text=note_text, y=-0.08,
+                   showarrow=False, font=dict(size=12), align='center')
 
-        # Add static second line at y=98 for Chart 3
-        static_line_sth = [100] * len(df['date'])
-        sth_static_line = go.Scatter(x=df['date'], y=static_line_sth, mode='lines', name='',
-                                     line=dict(color=pastel_color('000080'), dash='dash'), showlegend=False)  # Hide legend entry for Static Line
-        fig.add_trace(sth_static_line, row=2, col=1)
 
-        # Chart 4 
-        for index, row in df.iterrows():
-            color = pastel_color('008000') if row['change14'] >= 0 else pastel_color('FF0000')
-            trace = go.Scatter(x=[row['date'], row['date']], y=[0, row['change14']], mode='lines', name='',
-                               line=dict(color=color), showlegend=False)  # Hide legend entry for Chart 4
-            fig.add_trace(trace, row=2, col=2)
+fig.update_xaxes(tickfont=dict(size=12))
+fig.update_yaxes(tickfont=dict(size=12))
 
-        # Add static second line at y=0 for Chart 4
-        static_line_change14 = [1] * len(df['date'])
-        change14_static_line = go.Scatter(x=df['date'], y=static_line_change14, mode='lines', name='',
-                                                  line=dict(color=pastel_color('000080'), dash='dash'), showlegend=False)  # Hide legend entry for Static Line
-        fig.add_trace(change14_static_line, row=2, col=2)
+# Show the dashboard
+fig.show()
 
-        # Chart 5 
-        for index, row in df.iterrows():
-            color = pastel_color('008000') if row['hashcross'] >= 100 else pastel_color('FF0000')
-            trace = go.Scatter(x=[row['date'], row['date']], y=[0, row['hashcross']], mode='lines', name='',
-                               line=dict(color=color), showlegend=False)  # Hide legend entry for Chart 4
-            fig.add_trace(trace, row=3, col=1)
 
-        # Add static second line at y=0 for Chart 5
-        static_line_chart5 = [100] * len(df['date'])
-        chart5_static_line = go.Scatter(x=df['date'], y=static_line_chart5, mode='lines', name='',
-                                        line=dict(color=pastel_color('000080'), dash='dash'), showlegend=False)
-        fig.add_trace(chart5_static_line, row=3, col=1)
 
-        # Chart 6 
-        for index, row in df.iterrows():
-            color = pastel_color('008000') if row['basis_30'] >= 0 else pastel_color('FF0000')
-            trace = go.Scatter(x=[row['date'], row['date']], y=[0, row['basis_30']], mode='lines', name='',
-                               line=dict(color=color), showlegend=False)  # Hide legend entry for Chart 4
-            fig.add_trace(trace, row=3, col=2)
+# Create the Dash app
+app = dash.Dash(__name__)
+server = app.server
 
-        # Add static line for Chart 6
-        static_line_chart6 = [3] * len(df['date'])
-        chart6_static_line = go.Scatter(x=df['date'], y=static_line_chart6, mode='lines', name='',
-                                        line=dict(color=pastel_color('000080'), dash='dash'), showlegend=False)
-        fig.add_trace(chart6_static_line, row=3, col=2)
+# Define the layout of the app
+app.layout = html.Div([
+    dcc.Graph(id='output-graph', figure=fig)  # The figure is initially set to the 'fig' you defined earlier
+])
 
-        #Chart 7 
-        for index, row in df.iterrows():
-            color = pastel_color('008000') if row['inflow_supply'] >= 0 else pastel_color('FF0000')
-            trace = go.Scatter(x=[row['date'], row['date']], y=[0, row['inflow_supply']], mode='lines', name='',
-                               line=dict(color=color), showlegend=False)  # Hide legend entry for Chart 7
-            fig.add_trace(trace, row=4, col=1)
+@app.callback(
+    dash.dependencies.Output('output-graph', 'figure'),
+)
+def update_graph():
+    return fig
 
-        # Add static line for Chart 7
-        static_line_chart7 = [3] * len(df['date'])
-        chart7_static_line = go.Scatter(x=df['date'], y=static_line_chart7, mode='lines', name='',
-                                        line=dict(color=pastel_color('000080'), dash='dash'), showlegend=False)
-        fig.add_trace(chart7_static_line, row=4, col=1)
-
-        # Update layout and axis labels
-        fig.update_layout(
-            title_text="UTXO Strategy Dashboard",
-            height=1000,  # Increased height to create space for annotations
-            plot_bgcolor='rgb(240, 240, 240)',
-            font_family='Arial',
-            font_size=20,
-        )
-
-        # Update X-axis range for all subplots in the 1st column to start from 1/1/2023
-        for i in range(1, 4):
-            fig.update_xaxes(range=["2023-01-01", df['date'].max()], row=i, col=1)
-
-        # Update X-axis range for all subplots in the 2nd column to start from 1/1/2023
-        for i in range(1, 4):
-            fig.update_xaxes(range=["2023-01-01", df['date'].max()], row=i, col=2)
-
-        # Update Y Axis Across Charts
-        fig.update_yaxes(range=[90, 110], row=3, col=1)
-        fig.update_yaxes(range=[50, 150], row=2, col=1)
-
-        # Add annotations at the bottom of the charts
-        note_text = "Green: Positive values | Red: Negative values | Blue lines: Entry triggers"
-        fig.add_annotation(xref='paper', yref='paper', text=note_text, y=-0.08,
-                           showarrow=False, font=dict(size=12), align='center')
-
-        fig.update_xaxes(tickfont=dict(size=12))
-        fig.update_yaxes(tickfont=dict(size=12))
-
-        return fig
-
-    # Run the app
+if __name__ == '__main__':
     app.run_server(debug=False)
