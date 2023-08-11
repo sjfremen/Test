@@ -1,4 +1,3 @@
-#Get Glassnode Data
 import pandas as pd
 import requests
 import datetime
@@ -7,9 +6,11 @@ from plotly.subplots import make_subplots
 import dash
 import dash_core_components as dcc
 import dash_html_components as html
+import datetime
 
+#Get Glassnode Data
 api_key = "2NmhZcZSARowN6nW069LTzhnZ4L"
-TRAIN_START_DATE = '2022-01-01'
+TRAIN_START_DATE = '2020-01-01'
 dt = datetime.datetime.strptime(TRAIN_START_DATE, '%Y-%m-%d')
 start_date = int(dt.timestamp())
 
@@ -25,6 +26,7 @@ def get_glassnode(indicator):
         'LTHMVRV': 'market/mvrv_more_155',
         'hash_rate':'mining/hash_rate_mean',
         'basis': 'derivatives/futures_annualized_basis_3m',
+        'mktcap': 'market/marketcap_usd'
 
   }
   
@@ -139,6 +141,7 @@ sth = get_glassnode('STHMVRV')
 lth = get_glassnode('LTHMVRV')
 hash_rate = get_glassnode('hash_rate')
 basis = get_glassnode('basis')
+mktcap_data = get_glassnode('mktcap')
 
 df = ohlc.merge(funding, on="date_merge", how="left")
 df = df.merge(skew1m, on="date_merge",how="left")
@@ -146,6 +149,7 @@ df = df.merge(sth, on="date_merge",how="left")
 df = df.merge(lth,on="date_merge",how="left")
 df = df.merge(hash_rate,on="date_merge",how="left")
 df = df.merge(basis,on="date_merge",how="left")
+df = df.merge(mktcap_data,on="date_merge",how="left")
 df = df.merge(merged_data,on="date_merge",how="left")
 
 df['date'] = pd.to_datetime(df['date_merge'])
@@ -159,6 +163,12 @@ df['hash_30'] = df['hash_rate'].rolling(window=30).mean()
 df['hash_60'] = df['hash_rate'].rolling(window=60).mean()
 df['hashcross'] = (df['hash_30']/df['hash_60'])*100
 df['basis_30'] = (df['basis'].diff(periods=30))*100
+df['bitcoin_yardstick'] = df['mktcap'] / df['hash_rate']
+
+# Calculate rolling Z-Score
+rolling_mean = df['bitcoin_yardstick'].rolling(window=2*365).mean()
+rolling_std = df['bitcoin_yardstick'].rolling(window=2*365).std()
+df['rolling_zscore'] = (df['bitcoin_yardstick'] - rolling_mean) / rolling_std
 
 df.to_csv('dash.csv')
 metric_cleaned = df['funding'].dropna()
@@ -172,7 +182,7 @@ fig = make_subplots(
     subplot_titles=["Perps Funding Rate", "Skew 1M 30d Change",
                     "STH Price Cross", "STHLTH Ratio 14d Change",
                     "Hash Ribbons", 'Funding Basis 30d Change',
-                    "Stablecoin Inflows USDT & USDC"],
+                    "Stablecoin Inflows USDT & USDC", "Hash Rate Deviation"],
     row_heights=[0.8, 0.8, 0.8, 0.8],
     vertical_spacing=0.1,  # Adjust the vertical spacing between subplots
 )
@@ -273,26 +283,59 @@ chart7_static_line = go.Scatter(x=df['date'], y=static_line_chart7, mode='lines'
                                 line=dict(color=pastel_color('000080'), dash='dash'), showlegend=False)
 fig.add_trace(chart7_static_line, row=4, col=1)
 
+#Chart8
+for index, row in df.iterrows():
+    if row['rolling_zscore'] >= 4:
+        color = pastel_color('FF0000')  # Red for over 4
+    elif row['rolling_zscore'] >= 3:
+        color = pastel_color('FFA500')  # Orange for above 3 and below 4
+    elif row['rolling_zscore'] < -1.5:
+        color = pastel_color('0000FF')  # Blue for below -1.5
+    elif row['rolling_zscore'] < -1:
+        color = pastel_color('008000')  # Green for below -1 and above -1.5
+    else:
+        color = 'rgba(169, 169, 169, 0.5)'  # Darker gray for default
+        
+    trace = go.Scatter(x=[row['date'], row['date']], y=[0, row['rolling_zscore']], mode='lines', name='',
+                       line=dict(color=color), showlegend=False)
+    fig.add_trace(trace, row=4, col=2)
+
+# Add static line for Chart 8
+static_line_chart8 = [-1] * len(df['date'])
+chart8_static_line = go.Scatter(x=df['date'], y=static_line_chart8, mode='lines', name='',
+                                line=dict(color=pastel_color('000080'), dash='dash'), showlegend=False)
+fig.add_trace(chart8_static_line, row=4, col=2)
+
+
 # Update layout and axis labels
 fig.update_layout(
     title_text="UTXO Strategy Dashboard",
-    height=1000,  # Increased height to create space for annotations
+    height=1200,  # Increased height to create space for annotations
     plot_bgcolor='rgb(240, 240, 240)',
     font_family='Arial',
     font_size=20,
 )
 
-# Update X-axis range for all subplots in the 1st column to start from 1/1/2023
-for i in range(1, 4):
-    fig.update_xaxes(range=["2023-01-01", df['date'].max()], row=i, col=1)
 
-# Update X-axis range for all subplots in the 2nd column to start from 1/1/2023
-for i in range(1, 4):
-    fig.update_xaxes(range=["2023-01-01", df['date'].max()], row=i, col=2)
+# Calculate the date 6 months ago from the current date
+six_months_ago = datetime.datetime.now() - datetime.timedelta(days=6*30)
+
+# Update X-axis range for all subplots in the 1st column to start from 6 months ago
+for i in range(1, 5):
+    fig.update_xaxes(range=[six_months_ago, df['date'].max()], row=i, col=1)
+
+# Update X-axis range for all subplots in the 2nd column to start from 6 months ago
+for i in range(1, 5):
+    fig.update_xaxes(range=[six_months_ago, df['date'].max()], row=i, col=2)
 
 # Update Y Axis Across Charts
-fig.update_yaxes(range=[90, 110], row=3, col=1)
+fig.update_yaxes(range=[-0.0005, 0.0005], row=1, col=1)
+
 fig.update_yaxes(range=[50, 150], row=2, col=1)
+fig.update_yaxes(range=[-10, 20], row=2, col=2)
+
+fig.update_yaxes(range=[90, 110], row=3, col=1)
+fig.update_yaxes(range=[-10, 10], row=3, col=2)
 
 # Add annotations at the bottom of the charts
 note_text = "Green: Positive values | Red: Negative values | Blue lines: Entry triggers"
@@ -306,6 +349,27 @@ fig.update_yaxes(tickfont=dict(size=12))
 
 # Show the dashboard
 fig.show()
+
+
+
+# Create the Dash app
+app = dash.Dash(__name__)
+server = app.server
+
+# Define the layout of the app
+app.layout = html.Div([
+    dcc.Graph(id='output-graph', figure=fig)  # The figure is initially set to the 'fig' you defined earlier
+])
+
+@app.callback(
+    dash.dependencies.Output('output-graph', 'figure'),
+)
+def update_graph():
+    return fig
+
+if __name__ == '__main__':
+    app.run_server(debug=False)
+
 
 
 # Create the Dash app
