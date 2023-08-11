@@ -3,10 +3,15 @@ import requests
 import datetime
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
+import plotly.graph_objs as go
+import plotly.offline as pyo
+from scipy.stats import zscore
 import dash
 import dash_core_components as dcc
 import dash_html_components as html
 import datetime
+from dash.dependencies import Input, Output
+from PIL import Image # new import
 
 #Get Glassnode Data
 api_key = "2NmhZcZSARowN6nW069LTzhnZ4L"
@@ -173,10 +178,7 @@ df['rolling_zscore'] = (df['bitcoin_yardstick'] - rolling_mean) / rolling_std
 df.to_csv('dash.csv')
 metric_cleaned = df['funding'].dropna()
 
-import plotly.graph_objects as go
-from plotly.subplots import make_subplots
-
-# Create a subplot with 2 rows and 2 columns, and add subplot titles
+# Create a subplot with 2 rows and 2 columns, and add subplot titles for tab 1
 fig = make_subplots(
     rows=4, cols=2,
     subplot_titles=["Perps Funding Rate", "Skew 1M 30d Change",
@@ -186,6 +188,16 @@ fig = make_subplots(
     row_heights=[0.8, 0.8, 0.8, 0.8],
     vertical_spacing=0.1,  # Adjust the vertical spacing between subplots
 )
+
+'''
+# Create a subplot with 2 rows and 2 columns, and add subplot titles for tab 2
+fig2 = make_subplots(
+    rows=1, cols=2,
+    subplot_titles=["Test 1", "Test 2"],
+    row_heights=[0.8],
+    vertical_spacing=0.1,  # Adjust the vertical spacing between subplots
+)
+'''
 
 # Function to convert color to pastel shade
 def pastel_color(hex_color):
@@ -307,15 +319,84 @@ chart8_static_line = go.Scatter(x=df['date'], y=static_line_chart8, mode='lines'
 fig.add_trace(chart8_static_line, row=4, col=2)
 
 
+# Create Chart And Percentile Metrics
+df_chain = pd.read_csv('metrics.csv')
+df_chain = df_chain[(df_chain['t'] > "2016-01-01")]
+df_chain = df_chain.sort_values(by="t")
+
+df_chain['rhodl_percentile'] = df_chain.rhodl_ratio.rank(pct = True)
+df_chain['mvrv_z_percentile'] = df_chain.mvrv_z_score.rank(pct = True)
+df_chain['reserve_risk_percentile'] = df_chain.reserve_risk.rank(pct = True)
+df_chain['puell_multiple_percentile'] = df_chain.puell_multiple.rank(pct = True)
+df_chain['nupl_percentile'] = df_chain.net_unrealized_profit_loss.rank(pct = True)
+df_chain['profit_percentile'] = (df_chain.profit_relative.rolling(window=30).mean()).rank(pct = True)
+df_chain['30_day_realized_price'] = (df_chain.price_realized_usd.pct_change(periods=30)).rank(pct = True)
+df_chain['30_day_price'] = (df_chain.price_usd_close.pct_change(periods=30)).rank(pct = True)
+df_chain['mayer_percentile'] = (df_chain.price_usd_close/df_chain.price_usd_close.rolling(window=200).mean()).rank(pct = True)
+df_chain['30_day_hash_rate'] = (df_chain.hash_rate_mean.rolling(window=7).mean()).rank(pct = True)
+df_chain['rhodl_z'] = zscore(df_chain['rhodl_ratio'])
+df_chain['reserve_risk_z'] = zscore(df_chain['reserve_risk'])
+df_chain['sthlth_ratio'] = (df_chain['price_usd_close']/df_chain['mvrv_less_155'])/(df_chain['price_usd_close']/df_chain['mvrv_more_155'])
+df_chain['sthlth_ratio_percentile'] = df_chain['sthlth_ratio'].rank(pct=True)
+
+#Create Index
+df_chain['agg'] = df_chain['rhodl_percentile'] + df_chain['mvrv_z_percentile'] + df_chain['reserve_risk_percentile'] + df_chain['puell_multiple_percentile'] + df_chain['nupl_percentile'] + df_chain['profit_percentile'] + df_chain['30_day_realized_price'] + df_chain['mayer_percentile'] + df_chain['sthlth_ratio_percentile']    
+df_chain['agg'] = df_chain['agg']/9
+    
+#Create Seperate df_chain for heatmap chart 
+df_chain2 = df_chain[['t', 
+          'rhodl_percentile', 
+          'mvrv_z_percentile', 
+          'reserve_risk_percentile',
+          'puell_multiple_percentile', 
+          'nupl_percentile', 
+          'profit_percentile',
+          '30_day_realized_price',
+          'mayer_percentile',
+          'sthlth_ratio_percentile',
+          'agg'
+         ]]
+
+# Aggregate percentile chart 
+colors = ['red', 'green', 'blue', 'yellow', 'orange']
+
+# Create the heatmap trace
+trace = go.Heatmap(x=df_chain2['t'], y=df_chain2.columns[1:], z=df_chain2.iloc[:, 1:].values.T, colorscale='RdYlGn_r', dy=10)
+
+# Create subplots with increased height
+fig_heat = make_subplots(rows=2, cols=1, shared_xaxes=True, vertical_spacing=0.1, row_heights=[0.4, 0.4], subplot_titles=("On-Chain Metrics Heatmap", "BTC Price Weighted"))
+
+# Add heatmap trace to the first subplot
+fig_heat.add_trace(trace, row=1, col=1)
+
+# Add scatter chart trace to the second subplot (with log y-axis)
+fig_heat.add_trace(go.Scatter(x=df_chain['t'], y=df_chain['price_usd_close'], mode='markers', marker=dict(color=df_chain['agg'], colorscale='RdYlGn_r')), row=2, col=1)
+
+# Update layout of the subplots
+fig_heat.update_layout(
+    title='BTC On-Chain Metrics and Price',
+    #xaxis_title='Date',
+    yaxis_title='Percentile',
+    yaxis2_title='Price (USD, Log Scale)',
+    plot_bgcolor='white',
+    paper_bgcolor='rgba(0,0,0,0)',
+    font=dict(family="Arial", size=12, color="black"),  # Set text color to black
+    title_font=dict(family="Arial", size=18, color="black"),  # Set title text color to black
+    yaxis2_type='log'  # Set y-axis of the second subplot to log scale
+)
+
 # Update layout and axis labels
 fig.update_layout(
-    title_text="UTXO Strategy Dashboard",
+    title_text="UTXO Dashboard",
     height=1200,  # Increased height to create space for annotations
     plot_bgcolor='rgb(240, 240, 240)',
     font_family='Arial',
     font_size=20,
 )
 
+
+# Update the height of the subplots
+fig_heat.update_layout(height=1000)  # Adjust the height of the entire subplot
 
 # Calculate the date 6 months ago from the current date
 six_months_ago = datetime.datetime.now() - datetime.timedelta(days=6*30)
@@ -351,43 +432,39 @@ fig.update_yaxes(tickfont=dict(size=12))
 
 # Show the dashboard
 fig.show()
-
-
-
-# Create the Dash app
-app = dash.Dash(__name__)
-server = app.server
-
-# Define the layout of the app
-app.layout = html.Div([
-    dcc.Graph(id='output-graph', figure=fig)  # The figure is initially set to the 'fig' you defined earlier
-])
-
-@app.callback(
-    dash.dependencies.Output('output-graph', 'figure'),
-)
-def update_graph():
-    return fig
-
-if __name__ == '__main__':
-    app.run_server(debug=False)
-
-
+fig_heat.show()
 
 # Create the Dash app
 app = dash.Dash(__name__)
 server = app.server
 
-# Define the layout of the app
+# Define the layout of the app with tabs
 app.layout = html.Div([
-    dcc.Graph(id='output-graph', figure=fig)  # The figure is initially set to the 'fig' you defined earlier
+    dcc.Tabs(
+        id='tabs',
+        value='tab-1',
+        children=[
+            dcc.Tab(label='Strategy Tracking', value='tab-1'),
+            dcc.Tab(label='On-Chain Heatmap', value='tab-2'),
+        ],
+        colors={
+            "border": "white",
+            "primary": "dodgerblue",
+            "background": "aliceblue"
+        }
+    ),
+    html.Div(id='tabs-content', style={'padding': '20px'})
 ])
 
-@app.callback(
-    dash.dependencies.Output('output-graph', 'figure'),
-)
-def update_graph():
-    return fig
+
+# Define callback to update the content based on selected tab
+@app.callback(Output('tabs-content', 'children'), [Input('tabs', 'value')])
+def render_content(tab):
+    if tab == 'tab-1':
+        # Return the figure for Tab 1
+        return dcc.Graph(figure=fig)
+    elif tab == 'tab-2':
+        return dcc.Graph(figure=fig_heat)
 
 if __name__ == '__main__':
     app.run_server(debug=False)
