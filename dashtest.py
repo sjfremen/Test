@@ -15,7 +15,7 @@ from PIL import Image # new import
 
 #Get Glassnode Data
 api_key = "2NmhZcZSARowN6nW069LTzhnZ4L"
-TRAIN_START_DATE = '2020-01-01'
+TRAIN_START_DATE = '2016-01-01'
 dt = datetime.datetime.strptime(TRAIN_START_DATE, '%Y-%m-%d')
 start_date = int(dt.timestamp())
 
@@ -31,7 +31,13 @@ def get_glassnode(indicator):
         'LTHMVRV': 'market/mvrv_more_155',
         'hash_rate':'mining/hash_rate_mean',
         'basis': 'derivatives/futures_annualized_basis_3m',
-        'mktcap': 'market/marketcap_usd'
+        'mktcap': 'market/marketcap_usd',
+        'rhodl': 'indicators/rhodl_ratio',
+        'reserve_risk': 'indicators/reserve_risk',
+        'puell':'indicators/puell_multiple',
+        'nupl': 'indicators/net_unrealized_profit_loss_account_based',
+        'profit':'supply/profit_relative',
+        'realized_price': 'market/price_realized_usd'
 
   }
   
@@ -147,6 +153,14 @@ lth = get_glassnode('LTHMVRV')
 hash_rate = get_glassnode('hash_rate')
 basis = get_glassnode('basis')
 mktcap_data = get_glassnode('mktcap')
+rhodl = get_glassnode('rhodl')
+reserve_risk = get_glassnode('reserve_risk')
+puell = get_glassnode('puell')
+nupl = get_glassnode('nupl')
+mvrv = get_glassnode('mvrv')
+profit = get_glassnode('profit')
+realized_price = get_glassnode('realized_price')
+
 
 df = ohlc.merge(funding, on="date_merge", how="left")
 df = df.merge(skew1m, on="date_merge",how="left")
@@ -155,8 +169,16 @@ df = df.merge(lth,on="date_merge",how="left")
 df = df.merge(hash_rate,on="date_merge",how="left")
 df = df.merge(basis,on="date_merge",how="left")
 df = df.merge(mktcap_data,on="date_merge",how="left")
+df = df.merge(rhodl, on="date_merge",how="left")
+df = df.merge(reserve_risk, on="date_merge",how="left")
+df = df.merge(puell, on="date_merge",how="left")
+df = df.merge(nupl, on="date_merge",how="left")
+df = df.merge(mvrv, on="date_merge",how="left")
+df = df.merge(profit, on="date_merge",how="left")
+df = df.merge(realized_price, on="date_merge",how="left")
 df = df.merge(merged_data,on="date_merge",how="left")
 
+# Calculate metrics
 df['date'] = pd.to_datetime(df['date_merge'])
 df = df.drop(['date_x', 'date_y','date_merge'], axis=1)
 df['skew_100'] = df['skew1m']*100
@@ -169,6 +191,18 @@ df['hash_60'] = df['hash_rate'].rolling(window=60).mean()
 df['hashcross'] = (df['hash_30']/df['hash_60'])*100
 df['basis_30'] = (df['basis'].diff(periods=30))*100
 df['bitcoin_yardstick'] = df['mktcap'] / df['hash_rate']
+
+# Calculate percentiles 
+df['rhodl_percentile'] = df.rhodl.rank(pct = True)
+df['mvrv_z_percentile'] = df.mvrv.rank(pct = True)
+df['reserve_risk_percentile'] = df.reserve_risk.rank(pct = True)
+df['puell_multiple_percentile'] = df.puell.rank(pct = True)
+df['nupl_percentile'] = df.nupl.rank(pct = True)
+df['profit_percentile'] = (df.profit.rolling(window=30).mean()).rank(pct = True)
+df['30_day_realized_price'] = (df.realized_price.pct_change(periods=30)).rank(pct = True)
+df['mayer_percentile'] = (df.Close/df.Close.rolling(window=200).mean()).rank(pct = True)
+df['sthlth_ratio'] = (df['Close']/df['STHMVRV'])/(df['Close']/df['LTHMVRV'])
+df['sthlth_ratio_percentile'] = df['sthlth_ratio'].rank(pct=True)
 
 # Calculate rolling Z-Score
 rolling_mean = df['bitcoin_yardstick'].rolling(window=2*365).mean()
@@ -320,31 +354,11 @@ fig.add_trace(chart8_static_line, row=4, col=2)
 
 
 # Create Chart And Percentile Metrics
-df_chain = pd.read_csv('metrics.csv')
-df_chain = df_chain[(df_chain['t'] > "2016-01-01")]
-df_chain = df_chain.sort_values(by="t")
-
-df_chain['rhodl_percentile'] = df_chain.rhodl_ratio.rank(pct = True)
-df_chain['mvrv_z_percentile'] = df_chain.mvrv_z_score.rank(pct = True)
-df_chain['reserve_risk_percentile'] = df_chain.reserve_risk.rank(pct = True)
-df_chain['puell_multiple_percentile'] = df_chain.puell_multiple.rank(pct = True)
-df_chain['nupl_percentile'] = df_chain.net_unrealized_profit_loss.rank(pct = True)
-df_chain['profit_percentile'] = (df_chain.profit_relative.rolling(window=30).mean()).rank(pct = True)
-df_chain['30_day_realized_price'] = (df_chain.price_realized_usd.pct_change(periods=30)).rank(pct = True)
-df_chain['30_day_price'] = (df_chain.price_usd_close.pct_change(periods=30)).rank(pct = True)
-df_chain['mayer_percentile'] = (df_chain.price_usd_close/df_chain.price_usd_close.rolling(window=200).mean()).rank(pct = True)
-df_chain['30_day_hash_rate'] = (df_chain.hash_rate_mean.rolling(window=7).mean()).rank(pct = True)
-df_chain['rhodl_z'] = zscore(df_chain['rhodl_ratio'])
-df_chain['reserve_risk_z'] = zscore(df_chain['reserve_risk'])
-df_chain['sthlth_ratio'] = (df_chain['price_usd_close']/df_chain['mvrv_less_155'])/(df_chain['price_usd_close']/df_chain['mvrv_more_155'])
-df_chain['sthlth_ratio_percentile'] = df_chain['sthlth_ratio'].rank(pct=True)
-
-#Create Index
-df_chain['agg'] = df_chain['rhodl_percentile'] + df_chain['mvrv_z_percentile'] + df_chain['reserve_risk_percentile'] + df_chain['puell_multiple_percentile'] + df_chain['nupl_percentile'] + df_chain['profit_percentile'] + df_chain['30_day_realized_price'] + df_chain['mayer_percentile'] + df_chain['sthlth_ratio_percentile']    
-df_chain['agg'] = df_chain['agg']/9
+df['agg'] = df['rhodl_percentile'] + df['mvrv_z_percentile'] + df['reserve_risk_percentile'] + df['puell_multiple_percentile'] + df['nupl_percentile'] + df['profit_percentile'] + df['30_day_realized_price'] + df['mayer_percentile'] + df['sthlth_ratio_percentile']    
+df['agg'] = df['agg']/9
     
 #Create Seperate df_chain for heatmap chart 
-df_chain2 = df_chain[['t', 
+df_chain = df[['date',
           'rhodl_percentile', 
           'mvrv_z_percentile', 
           'reserve_risk_percentile',
@@ -361,7 +375,7 @@ df_chain2 = df_chain[['t',
 colors = ['red', 'green', 'blue', 'yellow', 'orange']
 
 # Create the heatmap trace
-trace = go.Heatmap(x=df_chain2['t'], y=df_chain2.columns[1:], z=df_chain2.iloc[:, 1:].values.T, colorscale='RdYlGn_r', dy=10)
+trace = go.Heatmap(x=df_chain['date'], y=df_chain.columns[1:], z=df_chain.iloc[:, 1:].values.T, colorscale='RdYlGn_r', dy=10)
 
 # Create subplots with increased height
 fig_heat = make_subplots(rows=2, cols=1, shared_xaxes=True, vertical_spacing=0.1, row_heights=[0.4, 0.4], subplot_titles=("On-Chain Metrics Heatmap", "BTC Price Weighted"))
@@ -370,7 +384,7 @@ fig_heat = make_subplots(rows=2, cols=1, shared_xaxes=True, vertical_spacing=0.1
 fig_heat.add_trace(trace, row=1, col=1)
 
 # Add scatter chart trace to the second subplot (with log y-axis)
-fig_heat.add_trace(go.Scatter(x=df_chain['t'], y=df_chain['price_usd_close'], mode='markers', marker=dict(color=df_chain['agg'], colorscale='RdYlGn_r')), row=2, col=1)
+fig_heat.add_trace(go.Scatter(x=df['date'], y=df['Close'], mode='markers', marker=dict(color=df['agg'], colorscale='RdYlGn_r')), row=2, col=1)
 
 # Update layout of the subplots
 fig_heat.update_layout(
