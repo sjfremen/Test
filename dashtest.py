@@ -433,6 +433,7 @@ fig.update_yaxes(range=[90, 110], row=3, col=1)
 fig.update_yaxes(range=[-10, 10], row=3, col=2)
 
 fig.update_yaxes(range=[0, 10], row=4, col=1)
+fig.update_yaxes(range=[0, 3], row=4, col=2)
 
 # Add annotations at the bottom of the charts
 note_text = "Green: Positive values | Red: Negative values | Blue lines: Entry triggers"
